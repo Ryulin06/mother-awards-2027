@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>模範母親｜工作人員後台</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./config.js"></script>
+<style>
+:root{--bg:#f7f5f4;--card:#fff;--line:#e4dcda;--ink:#423633;--muted:#837572;--accent:#8e5549}*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;color:var(--ink)}.wrap{max-width:980px;margin:auto;padding:24px}.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:16px}input,button{font:inherit}input[type=email],input[type=password],input[type=text]{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px}.btn{border:0;border-radius:12px;padding:11px 16px;background:var(--accent);color:white;font-weight:700;cursor:pointer}.ghost{background:white;color:var(--ink);border:1px solid var(--line)}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.hidden{display:none}.muted{color:var(--muted);font-size:13px}.item{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:12px 0}.item:first-child{border-top:0}.item .grow{flex:1;min-width:0}.wish{padding:10px 0;border-top:1px solid var(--line)}
+.wishline{display:flex;gap:10px;align-items:flex-start}
+.wishcheck{width:20px;height:20px;margin-top:2px;accent-color:var(--accent);flex:0 0 auto}
+.batchbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0 14px;border-bottom:1px solid var(--line);margin-bottom:2px;position:sticky;top:0;background:#fff;z-index:5}
+.batchbar .grow{flex:1}
+.smallbtn{padding:9px 12px}
+.moderation-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 4px}
+.repeat-setting{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 14px;margin:10px 0 16px;border:1px solid var(--line);border-radius:14px;background:#fffaf7}.repeat-setting select{padding:8px 10px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff}
+.filterbtn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:7px 11px;cursor:pointer}
+.filterbtn.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+.badge{display:inline-flex;align-items:center;border-radius:999px;padding:4px 8px;font-size:12px;font-weight:800;margin-left:6px}
+.badge-clean{background:#eaf6ec;color:#356440}
+.badge-flagged{background:#fff2c9;color:#855f00}
+.badge-blocked{background:#f8dada;color:#8a3030}
+.reason{font-size:12px;margin-top:5px;color:#8b5b24}
+.wish.flagged{background:#fffdf4;border-radius:12px;padding-left:10px;padding-right:10px}
+.wish.blocked{background:#fff5f5;border-radius:12px;padding-left:10px;padding-right:10px}
+h1{margin-top:0}.danger{background:#8a3f3f}
+</style>
+</head><body><div class="wrap"><h1>工作人員後台</h1><section id="login" class="card"><h2>管理員登入</h2><p class="muted">使用 Supabase Auth 已建立的管理員帳號登入。</p><form id="loginForm"><div class="row"><input id="email" type="email" placeholder="Email" required /><input id="password" type="password" placeholder="密碼" required /><button class="btn">登入</button></div></form><p id="loginMsg" class="muted"></p></section>
+<div id="panel" class="hidden"><section class="card"><div class="row"><div class="grow"><h2>影片播放清單</h2><p class="muted">影片會上傳到 Supabase Storage，現場 screen.html 會自動更新。</p></div><button id="logout" class="btn ghost">登出</button></div><input id="files" type="file" accept="video/mp4,video/webm" multiple /><div id="uploadMsg" class="muted" style="margin-top:8px"></div><div id="videos"></div></section><section class="card">
+      <h2>祝福留言管理</h2>
+      <p class="muted">系統會自動偵測疑似不雅字。黃色為「需注意」，紅色為「高風險且已自動暫停」。工作人員仍可人工恢復或刪除。</p>
+      <div class="repeat-setting">
+        <strong>新留言統一重複播放次數</strong>
+        <select id="repeatCount"></select>
+        <button id="saveRepeatCount" class="btn smallbtn" type="button">儲存設定</button>
+        <span id="repeatCountStatus" class="muted">目前：5 次</span>
+      </div>
+      <div class="moderation-tools">
+        <strong>審核篩選：</strong>
+        <button class="filterbtn active" data-filter="all" type="button">全部</button>
+        <button class="filterbtn" data-filter="flagged" type="button">⚠️ 需注意</button>
+        <button class="filterbtn" data-filter="blocked" type="button">⛔ 自動暫停</button>
+        <button class="filterbtn" data-filter="clean" type="button">✓ 正常</button>
+        <span id="moderationStats" class="muted"></span>
+      </div>
+
+      <div class="batchbar">
+        <label class="row" style="gap:7px">
+          <input id="selectAllWishes" type="checkbox" class="wishcheck" />
+          <strong>全選</strong>
+        </label>
+        <span id="selectedCount" class="muted grow">已選 0 則</span>
+        <button id="batchHide" class="btn ghost smallbtn" type="button" disabled>批量暫停</button>
+        <button id="batchDelete" class="btn danger smallbtn" type="button" disabled>批量刪除</button>
+      </div>
+
+      <div id="wishes"></div>
+    </section></div></div>
+<script>
+const client=supabase.createClient(APP_CONFIG.SUPABASE_URL,APP_CONFIG.SUPABASE_KEY);const $=s=>document.querySelector(s);let awards={};function esc(s=''){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+async function refreshSession(){const {data:{session}}=await client.auth.getSession();$('#login').classList.toggle('hidden',!!session);$('#panel').classList.toggle('hidden',!session);if(session){loadVideos();loadWishes()}}
+$('#loginForm').onsubmit=async e=>{e.preventDefault();$('#loginMsg').textContent='登入中…';const {error}=await client.auth.signInWithPassword({email:$('#email').value,password:$('#password').value});$('#loginMsg').textContent=error?'登入失敗：'+error.message:'';if(!error)refreshSession()};$('#logout').onclick=async()=>{await client.auth.signOut();refreshSession()};
+$('#files').onchange=async e=>{const files=[...e.target.files];if(!files.length)return;const bad=files.find(f=>!['video/mp4','video/webm'].includes(f.type));if(bad){$('#uploadMsg').textContent='格式不支援：'+bad.name+'。請使用 MP4（建議 H.264 + AAC）或 WebM。';e.target.value='';return}$('#uploadMsg').textContent='上傳中…';for(const f of files){const safe=(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2))+'.'+(f.name.split('.').pop()||'mp4').toLowerCase();const {error:uerr}=await client.storage.from('event-videos').upload(safe,f,{contentType:f.type,upsert:false});if(uerr){$('#uploadMsg').textContent='上傳失敗：'+uerr.message;return}const {data:maxrow}=await client.from('videos').select('sort_order').order('sort_order',{ascending:false}).limit(1).maybeSingle();const {error:derr}=await client.from('videos').insert({title:f.name,file_path:safe,sort_order:(maxrow?.sort_order||0)+1});if(derr){$('#uploadMsg').textContent='建立播放項目失敗：'+derr.message;return}}$('#uploadMsg').textContent='上傳完成';e.target.value='';loadVideos()};
+async function loadVideos(){const {data}=await client.from('videos').select('*').order('sort_order');$('#videos').innerHTML=(data||[]).map(v=>`<div class="item"><div class="grow"><strong>${esc(v.title)}</strong><div class="muted">順序 ${v.sort_order}・${v.active?'播放中':'已停用'}</div></div><button class="btn ghost toggle" data-id="${v.id}" data-active="${v.active}">${v.active?'停用':'啟用'}</button><button class="btn danger del" data-id="${v.id}" data-path="${esc(v.file_path)}">刪除</button></div>`).join('')||'<p class="muted">尚無影片</p>';document.querySelectorAll('.toggle').forEach(b=>b.onclick=async()=>{await client.from('videos').update({active:b.dataset.active!=='true'}).eq('id',b.dataset.id);loadVideos()});document.querySelectorAll('.del').forEach(b=>b.onclick=async()=>{if(!confirm('確定刪除此影片？'))return;await client.storage.from('event-videos').remove([b.dataset.path]);await client.from('videos').delete().eq('id',b.dataset.id);loadVideos()})}
+let wishFilter='all';
+
+
+async function loadRepeatSetting(){
+  const select=$('#repeatCount');
+  if(!select)return;
+
+  if(!select.options.length){
+    select.innerHTML=Array.from({length:20},(_,i)=>`<option value="${i+1}">${i+1} 次</option>`).join('');
+  }
+
+  const {data,error}=await client.from('event_settings')
+    .select('value_int')
+    .eq('key','ticker_repeat_count')
+    .maybeSingle();
+
+  if(error){
+    $('#repeatCountStatus').textContent='讀取設定失敗';
+    return;
+  }
+
+  const count=Math.min(20,Math.max(1,Number(data?.value_int||5)));
+  select.value=String(count);
+  $('#repeatCountStatus').textContent=`目前：${count} 次`;
+}
+
+async function saveRepeatSetting(){
+  const select=$('#repeatCount');
+  const btn=$('#saveRepeatCount');
+  const count=Math.min(20,Math.max(1,Number(select?.value||5)));
+
+  btn.disabled=true;
+  const old=btn.textContent;
+  btn.textContent='儲存中…';
+
+  const {error}=await client.from('event_settings')
+    .update({value_int:count,updated_at:new Date().toISOString()})
+    .eq('key','ticker_repeat_count');
+
+  if(error){
+    alert('儲存播放次數失敗：'+error.message);
+  }else{
+    $('#repeatCountStatus').textContent=`目前：${count} 次`;
+    btn.textContent='已儲存 ✓';
+    setTimeout(()=>btn.textContent=old,1000);
+  }
+  btn.disabled=false;
+}
+
+function moderationBadge(w){
+  if(w.moderation_status==='blocked'){
+    return `<span class="badge badge-blocked">⛔ 自動暫停</span>`;
+  }
+  if(w.moderation_status==='flagged'){
+    return `<span class="badge badge-flagged">⚠️ 需注意</span>`;
+  }
+  return `<span class="badge badge-clean">✓ 正常</span>`;
+}
+
+async function loadWishes(){
+  if(!Object.keys(awards).length){
+    const {data:a,error:aerr}=await client.from('awards').select('id,name');
+    if(aerr){
+      $('#wishes').innerHTML='<p class="muted">讀取獲獎者失敗：'+esc(aerr.message)+'</p>';
+      return
+    }
+    awards=Object.fromEntries((a||[]).map(x=>[x.id,x.name]));
+  }
+
+  const {data,error}=await client.from('wishes').select('*').order('created_at',{ascending:false}).limit(300);
+  if(error){
+    $('#wishes').innerHTML='<p class="muted">讀取留言失敗：'+esc(error.message)+'</p>';
+    return
+  }
+
+  const allRows=data||[];
+  const cleanCount=allRows.filter(w=>w.moderation_status==='clean').length;
+  const flaggedCount=allRows.filter(w=>w.moderation_status==='flagged').length;
+  const blockedCount=allRows.filter(w=>w.moderation_status==='blocked').length;
+  $('#moderationStats').textContent=`正常 ${cleanCount}・需注意 ${flaggedCount}・自動暫停 ${blockedCount}`;
+
+  const rows=wishFilter==='all'
+    ? allRows
+    : allRows.filter(w=>w.moderation_status===wishFilter);
+
+  $('#wishes').innerHTML=rows.map(w=>`
+    <div class="wish ${w.moderation_status||'clean'}">
+      <div class="wishline">
+        <input
+          class="wishcheck wish-select"
+          type="checkbox"
+          value="${w.id}"
+          data-id="${w.id}"
+          aria-label="選取留言"
+        />
+        <div class="grow">
+          <div>
+            <strong>${esc(w.sender_name||'匿名')}</strong>
+            對
+            <strong>${esc(awards[w.award_id]||'')}媽媽</strong>
+            說：「${esc(w.message)}」
+            ${moderationBadge(w)}
+          </div>
+
+          ${w.moderation_reason
+            ? `<div class="reason">判定原因：${esc(w.moderation_reason)}</div>`
+            : ''}
+
+          <div class="row" style="margin-top:7px">
+            <span class="muted">
+              ${new Date(w.created_at).toLocaleString()}・${w.is_visible?'顯示中':'已暫停'}
+            </span>
+            <button
+              class="btn ghost hide"
+              data-id="${w.id}"
+              data-visible="${w.is_visible}"
+              type="button"
+            >${w.is_visible?'暫停':'恢復顯示'}</button>
+            <button
+              class="btn ghost replay-wish"
+              data-id="${w.id}"
+              data-visible="${w.is_visible}"
+              type="button"
+              ${w.is_visible?'':'disabled'}
+              title="${w.is_visible?'讓這則留言依目前統一播放次數重新播放':'暫停中的留言需先恢復顯示'}"
+            >再次播放</button>
+            <button
+              class="btn danger delete-wish"
+              data-id="${w.id}"
+              type="button"
+            >刪除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('')||'<p class="muted">目前沒有符合此篩選條件的留言</p>';
+
+  const selectAll=$('#selectAllWishes');
+  const selectedCount=$('#selectedCount');
+  const batchHide=$('#batchHide');
+  const batchDelete=$('#batchDelete');
+
+  function selectedIds(){
+    return [...document.querySelectorAll('.wish-select:checked')].map(x=>Number(x.value));
+  }
+
+  function updateBatchState(){
+    const checks=[...document.querySelectorAll('.wish-select')];
+    const selected=checks.filter(x=>x.checked);
+    selectedCount.textContent=`已選 ${selected.length} 則`;
+    batchHide.disabled=selected.length===0;
+    batchDelete.disabled=selected.length===0;
+
+    if(!checks.length){
+      selectAll.checked=false;
+      selectAll.indeterminate=false;
+    }else{
+      selectAll.checked=selected.length===checks.length;
+      selectAll.indeterminate=selected.length>0&&selected.length<checks.length;
+    }
+  }
+
+  document.querySelectorAll('.wish-select').forEach(c=>{
+    c.addEventListener('change',updateBatchState);
+  });
+
+  selectAll.checked=false;
+  selectAll.indeterminate=false;
+  selectAll.onchange=()=>{
+    document.querySelectorAll('.wish-select').forEach(c=>c.checked=selectAll.checked);
+    updateBatchState();
+  };
+
+  batchHide.onclick=async()=>{
+    const ids=selectedIds();
+    if(!ids.length)return;
+    if(!confirm(`確定要暫停 ${ids.length} 則留言嗎？\n暫停後會從大螢幕移除，但之後仍可單筆恢復顯示。`))return;
+
+    batchHide.disabled=true;
+    batchDelete.disabled=true;
+    batchHide.textContent='處理中…';
+
+    const {error}=await client.from('wishes').update({is_visible:false}).in('id',ids);
+
+    if(error){
+      alert('批量暫停失敗：'+error.message);
+      batchHide.textContent='批量暫停';
+      updateBatchState();
+      return
+    }
+
+    batchHide.textContent='批量暫停';
+    await loadWishes();
+  };
+
+  batchDelete.onclick=async()=>{
+    const ids=selectedIds();
+    if(!ids.length)return;
+    if(!confirm(`確定永久刪除 ${ids.length} 則留言嗎？\n刪除後無法復原。`))return;
+
+    batchHide.disabled=true;
+    batchDelete.disabled=true;
+    batchDelete.textContent='刪除中…';
+
+    const {error}=await client.from('wishes').delete().in('id',ids);
+
+    if(error){
+      alert('批量刪除失敗：'+error.message);
+      batchDelete.textContent='批量刪除';
+      updateBatchState();
+      return
+    }
+
+    batchDelete.textContent='批量刪除';
+    await loadWishes();
+  };
+
+  document.querySelectorAll('.hide').forEach(b=>b.onclick=async()=>{
+    const original=b.textContent;
+    b.disabled=true;
+    b.textContent='處理中…';
+
+    const next=b.dataset.visible!=='true';
+    const {error}=await client.from('wishes').update({is_visible:next}).eq('id',b.dataset.id);
+
+    if(error){
+      alert('更新留言失敗：'+error.message);
+      b.disabled=false;
+      b.textContent=original;
+      return
+    }
+
+    await loadWishes();
+  });
+
+
+  document.querySelectorAll('.replay-wish').forEach(b=>b.onclick=async()=>{
+    const id=Number(b.dataset.id);
+    if(!id)return;
+
+    const original=b.textContent;
+    b.disabled=true;
+    b.textContent='送出中…';
+
+    const {error}=await client.from('wish_events').insert({
+      wish_id:id,
+      action:'replay'
+    });
+
+    if(error){
+      alert('重新播放失敗：'+error.message);
+      b.disabled=false;
+      b.textContent=original;
+      return;
+    }
+
+    b.textContent='已送出 ✓';
+    setTimeout(()=>{
+      b.textContent=original;
+      b.disabled=false;
+    },1200);
+  });
+
+  document.querySelectorAll('.delete-wish').forEach(b=>b.onclick=async()=>{
+    if(!confirm('確定永久刪除此留言？刪除後無法復原。'))return;
+
+    b.disabled=true;
+    b.textContent='刪除中…';
+
+    const {error}=await client.from('wishes').delete().eq('id',b.dataset.id);
+
+    if(error){
+      alert('刪除留言失敗：'+error.message);
+      b.disabled=false;
+      b.textContent='刪除';
+      return
+    }
+
+    await loadWishes();
+  });
+
+  updateBatchState();
+}
+
+document.querySelectorAll('.filterbtn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    wishFilter=b.dataset.filter;
+    document.querySelectorAll('.filterbtn').forEach(x=>x.classList.toggle('active',x===b));
+    loadWishes();
+  });
+});
+
+
+document.getElementById('saveRepeatCount')?.addEventListener('click',saveRepeatSetting);
+loadRepeatSetting();
+
+client.auth.onAuthStateChange(()=>refreshSession());refreshSession();
+</script></body></html>
