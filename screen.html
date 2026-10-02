@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>模範母親｜現場大螢幕</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./config.js"></script>
+<style>
+*{box-sizing:border-box}
+html,body{
+  margin:0;background:#101010;color:white;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;
+  overflow:hidden
+}
+.stage{height:100vh;display:flex;flex-direction:column;background:#111}
+.video{
+  flex:1;min-height:0;position:relative;display:grid;place-items:center;
+  background:#000;overflow:hidden
+}
+.video video{width:100%;height:100%;object-fit:contain;background:#000}
+.empty{text-align:center;color:#c9c9c9;font-size:24px}
+.hidden{display:none!important}
+
+.status{
+  position:absolute;top:16px;right:18px;z-index:30;
+  background:rgba(0,0,0,.5);padding:8px 12px;border-radius:999px;
+  font-size:13px;color:#ddd;backdrop-filter:blur(6px)
+}
+
+/* 多列祝福跑馬燈：每列從左往右移動 */
+.message-layer{
+  position:absolute;inset:0;z-index:15;pointer-events:none;
+  overflow:hidden;padding:26px 0 150px;
+}
+.message-lane{
+  position:absolute;left:0;right:0;height:58px;overflow:hidden;
+}
+.message-lane:nth-child(1){top:5%}
+.message-lane:nth-child(2){top:14%}
+.message-lane:nth-child(3){top:23%}
+.message-lane:nth-child(4){bottom:26%}
+.message-lane:nth-child(5){bottom:17%}
+
+.message-line{
+  position:absolute;
+  right:100%;
+  white-space:nowrap;
+  display:inline-block;
+  font-weight:900;
+  font-size:clamp(24px,2.2vw,44px);
+  line-height:1.22;
+  letter-spacing:.02em;
+  color:#fff;
+  text-shadow:
+    -2px -2px 0 rgba(0,0,0,.86),
+     2px -2px 0 rgba(0,0,0,.86),
+    -2px  2px 0 rgba(0,0,0,.86),
+     2px  2px 0 rgba(0,0,0,.86),
+     0 4px 12px rgba(0,0,0,.84);
+  animation:marqueeLtr 13s linear infinite;
+  animation-delay:var(--delay,0s);
+}
+.message-line .name{color:#ffd06f}
+@keyframes marqueeLtr{
+  from{transform:translateX(0)}
+  to{transform:translateX(calc(200vw + 100%))}
+}
+
+/* 底部祝福花園：一則顯示留言 = 一朵花 */
+.flower-garden{
+  position:absolute;left:0;right:0;bottom:0;z-index:20;
+  min-height:138px;padding:6px 16px 10px;
+  display:flex;flex-direction:column;justify-content:flex-end;
+  background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.20) 24%,rgba(35,23,22,.76));
+  pointer-events:none;
+}
+.flower-label{
+  align-self:flex-end;
+  margin:0 8px 4px 0;
+  padding:4px 9px;border-radius:999px;
+  background:rgba(255,255,255,.13);
+  color:#fff;font-size:13px;
+  backdrop-filter:blur(5px)
+}
+.flowers{
+  position:relative;
+  display:flex;
+  flex-wrap:wrap-reverse;
+  align-items:flex-end;
+  justify-content:center;
+  align-content:flex-end;
+  gap:0;
+  padding:0 2vw;
+  min-height:98px;
+  overflow:hidden;
+}
+.flowers:before{
+  content:'';
+  position:absolute;left:4%;right:4%;bottom:0;height:38px;
+  background:linear-gradient(180deg,rgba(79,104,63,.15),rgba(47,77,45,.55));
+  border-radius:50% 50% 0 0/100% 100% 0 0;
+  filter:blur(1px)
+}
+.bloom{
+  position:relative;
+  flex:0 0 auto;
+  width:clamp(34px,3.1vw,58px);
+  height:clamp(34px,3.1vw,58px);
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  margin-left:clamp(-12px,-0.7vw,-6px);
+  margin-top:clamp(-10px,-0.6vw,-5px);
+  font-size:clamp(28px,2.7vw,50px);
+  line-height:1;
+  filter:drop-shadow(0 3px 3px rgba(0,0,0,.42));
+  animation:bloomIn .42s ease both;
+}
+.bloom:nth-child(4n+1){transform:translateY(8px) rotate(-5deg)}
+.bloom:nth-child(4n+2){transform:translateY(1px) rotate(4deg)}
+.bloom:nth-child(4n+3){transform:translateY(11px) rotate(2deg)}
+.bloom:nth-child(4n){transform:translateY(5px) rotate(-3deg)}
+@keyframes bloomIn{
+  from{opacity:0;scale:.55;translate:0 14px}
+  to{opacity:1;scale:var(--s,1);translate:0 0}
+}
+
+
+.play-start{
+  position:absolute;inset:0;z-index:40;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.32);
+  backdrop-filter:blur(2px)
+}
+.play-start button{
+  border:0;border-radius:18px;
+  padding:18px 28px;
+  font-size:22px;font-weight:800;
+  background:#fff;color:#222;
+  box-shadow:0 8px 30px rgba(0,0,0,.35);
+  cursor:pointer
+}
+.play-start small{
+  display:block;margin-top:8px;
+  font-size:13px;font-weight:500;color:#666
+}
+
+/* 保留一條很低調的活動資訊帶，不再作為主跑馬燈 */
+.info-bar{
+  flex:0 0 42px;height:42px;
+  display:flex;align-items:center;justify-content:center;
+  background:#6f4339;color:#fff7f3;
+  font-size:16px;font-weight:700;letter-spacing:.04em
+}
+
+@media(max-width:1100px){
+  .flowers{grid-template-columns:repeat(20,minmax(18px,1fr))}
+  .message-lane:nth-child(4){bottom:29%}
+  .message-lane:nth-child(5){bottom:19%}
+}
+@media(max-width:700px){
+  .message-layer{padding-bottom:100px}
+  .message-line{left:4%;right:4%;font-size:clamp(19px,5vw,30px)}
+  .flowers{grid-template-columns:repeat(15,minmax(18px,1fr))}
+  .info-bar{font-size:13px}
+}
+@media(prefers-reduced-motion:reduce){
+  .message-line,.bloom{transition:none;animation:none}
+  .message-line{right:auto;left:4%;white-space:normal}
+}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="status" id="status">連線中…</div>
+
+  <div class="video">
+    <div id="empty" class="empty">等待工作人員上傳影片</div>
+
+    <video id="video" class="hidden" autoplay muted playsinline preload="auto"></video>
+
+    <div id="playStart" class="play-start hidden">
+      <button id="playStartBtn" type="button">啟動影片播放（含聲音）<small>Chrome 需要先點一下，之後影片會自動連播</small></button>
+    </div>
+
+    <div id="videoError" class="empty" style="display:none;color:#ffcfbf;padding:24px">
+      影片格式無法在此瀏覽器播放。請改用 MP4（H.264 + AAC）或 WebM。
+    </div>
+
+    <div class="message-layer" id="messageLayer" aria-live="polite">
+      <div class="message-lane"><div class="message-line" style="--delay:-1s"></div></div>
+      <div class="message-lane"><div class="message-line" style="--delay:-4s"></div></div>
+      <div class="message-lane"><div class="message-line" style="--delay:-7s"></div></div>
+      <div class="message-lane"><div class="message-line" style="--delay:-10s"></div></div>
+      <div class="message-lane"><div class="message-line" style="--delay:-13s"></div></div>
+    </div>
+
+    <div class="flower-garden">
+      <div class="flower-label" id="flowerLabel">0 朵祝福之花</div>
+      <div class="flowers" id="flowers"></div>
+    </div>
+  </div>
+
+  <div class="info-bar">每一則祝福，都會在螢幕上綻放成一朵花</div>
+</div>
+
+<script>
+const client=supabase.createClient(APP_CONFIG.SUPABASE_URL,APP_CONFIG.SUPABASE_KEY);
+
+const video=document.getElementById('video');
+const empty=document.getElementById('empty');
+const videoError=document.getElementById('videoError');
+const status=document.getElementById('status');
+const flowers=document.getElementById('flowers');
+const flowerLabel=document.getElementById('flowerLabel');
+const messageLines=[...document.querySelectorAll('.message-line')];
+const playStart=document.getElementById('playStart');
+const playStartBtn=document.getElementById('playStartBtn');
+let userActivatedAudio=false;
+
+let awards={};
+let wishes=[];
+let videos=[];
+let idx=0;
+let messageOffset=0;
+let messageTimer=null;
+
+const flowerSet=['🌷','🌸','🌺','🌼','🌹','🪻','🌻','💐','🌿'];
+
+function esc(s=''){
+  return String(s).replace(/[&<>'"]/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'
+  }[c]))
+}
+
+function renderFlowers(){
+  const visible=wishes.slice(0,60);
+  flowers.innerHTML=visible.map((w,i)=>{
+    const z=1+(i%7);
+    const scale=(0.90+((i%5)*0.035)).toFixed(2);
+    return `<span class="bloom" style="z-index:${z};--s:${scale}" title="${esc(awards[w.award_id]||'')}">${flowerSet[i%flowerSet.length]}</span>`;
+  }).join('');
+  flowerLabel.textContent=`${visible.length} 朵祝福之花`;
+}
+
+function formatWish(w){
+  return `給 <span class="name">${esc(awards[w.award_id]||'')}</span> 媽媽：「${esc(w.message)}」`;
+}
+
+function renderMessageGroup(){
+  messageLines.forEach((el)=>{
+    el.innerHTML='';
+    el.style.animation='none';
+    void el.offsetWidth;
+    el.style.animation='';
+  });
+
+  if(!wishes.length){
+    messageLines[2].innerHTML='歡迎來到模範母親表揚典禮，讓我們把感謝說給媽媽聽。';
+    return;
+  }
+
+  const count=Math.min(5,wishes.length);
+  for(let i=0;i<count;i++){
+    const w=wishes[(messageOffset+i)%wishes.length];
+    messageLines[i].innerHTML=formatWish(w);
+  }
+}
+
+function restartMessageRotation(immediate=false){
+  if(messageTimer) clearInterval(messageTimer);
+  if(immediate){
+    messageOffset=0;
+    renderMessageGroup();
+  }
+  messageTimer=setInterval(()=>{
+    if(wishes.length>5){
+      messageOffset=(messageOffset+5)%wishes.length;
+      renderMessageGroup();
+    }
+  },6500);
+}
+
+function renderWishes(){
+  renderFlowers();
+  restartMessageRotation(true);
+}
+
+async function loadWishes(){
+  const [{data:a},{data:w}]=await Promise.all([
+    client.from('awards').select('id,name'),
+    client.from('wishes')
+      .select('id,award_id,message,created_at,is_visible')
+      .order('created_at',{ascending:false})
+      .limit(100)
+  ]);
+
+  awards=Object.fromEntries((a||[]).map(x=>[x.id,x.name]));
+  wishes=(w||[]).filter(x=>x.is_visible!==false);
+  renderWishes();
+}
+
+async function loadVideos(){
+  const {data}=await client.from('videos')
+    .select('id,title,file_path,sort_order,active')
+    .eq('active',true)
+    .order('sort_order');
+
+  videos=data||[];
+
+  if(!videos.length){
+    video.pause();
+    video.removeAttribute('src');
+    video.classList.add('hidden');
+    empty.classList.remove('hidden');
+    videoError.style.display='none';
+    return;
+  }
+
+  idx=Math.min(idx,videos.length-1);
+  playIndex(idx);
+}
+
+function playIndex(i){
+  if(!videos.length)return;
+
+  idx=(i+videos.length)%videos.length;
+  const item=videos[idx];
+  const ext=(item.file_path.split('.').pop()||'').toLowerCase();
+
+  if(ext==='mov'||ext==='qt'){
+    video.pause();
+    video.removeAttribute('src');
+    video.classList.add('hidden');
+    empty.classList.add('hidden');
+    videoError.style.display='block';
+    videoError.innerHTML='目前影片「'+esc(item.title)+'」為 MOV 格式，Chrome 可能無法播放。<br>請改上傳 MP4（H.264 + AAC）或 WebM。';
+    status.textContent='影片格式不支援';
+    return;
+  }
+
+  videoError.style.display='none';
+  const {data}=client.storage.from('event-videos').getPublicUrl(item.file_path);
+  video.pause();
+  video.src=data.publicUrl;
+  video.load();
+  video.classList.remove('hidden');
+  empty.classList.add('hidden');
+  status.textContent='載入影片中…';
+
+  // Chrome 會阻擋「有聲音的自動播放」。
+  // 因此先靜音自動播放；工作人員只要點一次，就能解除靜音並繼續自動連播。
+  if(!userActivatedAudio){
+    video.muted=true;
+  }
+
+  const p=video.play();
+  if(p&&p.then){
+    p.then(()=>{
+      status.textContent=video.muted?'影片播放中（靜音）':'影片播放中';
+      if(!userActivatedAudio) playStart.classList.remove('hidden');
+    }).catch(()=>{
+      playStart.classList.remove('hidden');
+      status.textContent='請點一下啟動影片';
+    });
+  }
+}
+
+playStartBtn.addEventListener('click',async ()=>{
+  userActivatedAudio=true;
+  video.muted=false;
+  try{
+    await video.play();
+    playStart.classList.add('hidden');
+    status.textContent='影片播放中';
+  }catch(err){
+    status.textContent='影片無法播放';
+    videoError.style.display='block';
+    videoError.textContent='瀏覽器仍無法播放這支影片，可能是 MP4 內部編碼不支援。建議使用 H.264 + AAC。';
+  }
+});
+
+video.addEventListener('loadedmetadata',()=>{
+  status.textContent='影片已載入';
+});
+video.addEventListener('canplay',()=>{
+  if(video.paused && !userActivatedAudio){
+    video.muted=true;
+    video.play().catch(()=>{ playStart.classList.remove('hidden'); });
+  }
+});
+
+video.addEventListener('ended',()=>playIndex(idx+1));
+video.addEventListener('playing',()=>{status.textContent=video.muted?'影片播放中（靜音）':'影片播放中'});
+video.addEventListener('error',()=>{
+  video.classList.add('hidden');
+  empty.classList.add('hidden');
+  videoError.style.display='block';
+  videoError.textContent='影片載入失敗或編碼不支援。請改用 MP4（H.264 + AAC）或 WebM。';
+  status.textContent='播放失敗';
+});
+
+/* 新留言：立即刷新，花朵與疊字都會立刻增加 */
+client.channel('screen-wishes')
+  .on('postgres_changes',{event:'INSERT',schema:'public',table:'wishes'},async payload=>{
+    const w=payload.new;
+    if(w&&w.is_visible!==false){
+      wishes.unshift(w);
+      renderWishes();
+    }
+  })
+  .subscribe(s=>{
+    status.textContent=s==='SUBSCRIBED'?'即時連線中':'重新連線中…';
+  });
+
+/* 隱藏 / 恢復 / 刪除：重新抓取可顯示留言，花朵也會同步減少 */
+client.channel('screen-wish-events')
+  .on('postgres_changes',{event:'INSERT',schema:'public',table:'wish_events'},()=>loadWishes())
+  .subscribe();
+
+client.channel('screen-videos')
+  .on('postgres_changes',{event:'*',schema:'public',table:'videos'},()=>loadVideos())
+  .subscribe();
+
+loadWishes();
+loadVideos();
+</script>
+</body>
+</html>
