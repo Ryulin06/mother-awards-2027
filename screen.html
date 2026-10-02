@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>模範母親｜現場大螢幕</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./config.js"></script>
+<style>
+*{box-sizing:border-box}html,body{margin:0;background:#101010;color:white;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;overflow:hidden}.stage{height:100vh;display:flex;flex-direction:column;background:#111}.video{flex:1;min-height:0;display:grid;place-items:center;background:#000}.video video{width:100%;height:100%;object-fit:contain}.empty{text-align:center;color:#c9c9c9;font-size:24px}.ticker{height:92px;flex:0 0 92px;overflow:hidden;white-space:nowrap;display:flex;align-items:center;background:linear-gradient(90deg,#c98576,#f0c8bc,#c98576);color:#3e241f;border-top:1px solid rgba(255,255,255,.15)}.track{display:inline-flex;min-width:max-content;align-items:center;animation:marquee 28s linear infinite}.item{font-weight:800;font-size:30px;padding-right:100px}.dot{margin-right:18px}.status{position:absolute;top:16px;right:18px;background:rgba(0,0,0,.5);padding:8px 12px;border-radius:999px;font-size:13px;color:#ddd}@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}@media(max-width:900px){.item{font-size:22px}.ticker{height:74px;flex-basis:74px}}
+</style>
+</head>
+<body>
+<div class="stage"><div class="status" id="status">連線中…</div><div class="video"><div id="empty" class="empty">等待工作人員上傳影片</div><video id="video" class="hidden" autoplay playsinline></video></div><div class="ticker"><div class="track" id="track"></div></div></div>
+<script>
+const client=supabase.createClient(APP_CONFIG.SUPABASE_URL,APP_CONFIG.SUPABASE_KEY);const video=document.getElementById('video'),empty=document.getElementById('empty'),track=document.getElementById('track'),status=document.getElementById('status');let awards={},wishes=[],videos=[],idx=0;
+function esc(s=''){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function renderTicker(){const base=wishes.length?wishes.slice(0,80).map(w=>`<span class="item"><span class="dot">✿</span>給 ${esc(awards[w.award_id]||'')} 媽媽：「${esc(w.message)}」</span>`).join(''):`<span class="item"><span class="dot">✿</span>歡迎來到模範母親表揚典禮，讓我們把感謝說給媽媽聽。</span>`;track.innerHTML=base+base;track.style.animationDuration=Math.max(22,(wishes.length||1)*7)+'s'}
+async function loadWishes(){const [{data:a},{data:w}]=await Promise.all([client.from('awards').select('id,name'),client.from('wishes').select('id,award_id,message,created_at').order('created_at',{ascending:false}).limit(100)]);awards=Object.fromEntries((a||[]).map(x=>[x.id,x.name]));wishes=w||[];renderTicker()}
+async function loadVideos(){const {data}=await client.from('videos').select('id,title,file_path,sort_order,active').eq('active',true).order('sort_order');videos=data||[];if(!videos.length){video.pause();video.removeAttribute('src');video.classList.add('hidden');empty.classList.remove('hidden');return}idx=Math.min(idx,videos.length-1);playIndex(idx)}
+function playIndex(i){if(!videos.length)return;idx=(i+videos.length)%videos.length;const item=videos[idx];const {data}=client.storage.from('event-videos').getPublicUrl(item.file_path);video.src=data.publicUrl;video.classList.remove('hidden');empty.classList.add('hidden');video.play().catch(()=>{})}
+video.addEventListener('ended',()=>playIndex(idx+1));
+client.channel('screen-wishes').on('postgres_changes',{event:'INSERT',schema:'public',table:'wishes'},payload=>{const w=payload.new;if(w&&w.is_visible!==false){wishes.unshift(w);renderTicker()}}).subscribe(s=>{status.textContent=s==='SUBSCRIBED'?'即時連線中':'重新連線中…'});
+client.channel('screen-videos').on('postgres_changes',{event:'*',schema:'public',table:'videos'},()=>loadVideos()).subscribe();
+loadWishes();loadVideos();
+</script>
+</body></html>
