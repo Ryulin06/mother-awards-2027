@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>模範母親｜送上一句祝福</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./config.js"></script>
+<style>
+:root{
+  --bg:#fffaf7;--card:#fff;--ink:#553f38;--muted:#8c7770;
+  --line:#eddeda;--pink2:#f8e4dc;--accent:#a85f50
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;
+  background:var(--bg);color:var(--ink)
+}
+.wrap{max-width:760px;margin:auto;padding:20px}
+.hero{padding:24px 6px 18px}
+.eyebrow{font-size:13px;color:var(--muted)}
+h1{font-size:30px;margin:6px 0 8px}
+.sub{color:var(--muted);line-height:1.7;margin:0}
+.search{
+  width:100%;font-size:16px;padding:14px 16px;border:1px solid var(--line);
+  border-radius:16px;background:#fff;outline:none
+}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.card{
+  border:1px solid var(--line);border-radius:18px;background:var(--card);
+  padding:15px;text-align:left;min-height:108px;cursor:pointer;color:var(--ink)
+}
+.card strong{font-size:18px}
+.role{font-size:13px;color:var(--muted);margin-top:5px}
+.count{font-size:12px;color:var(--accent);margin-top:12px}
+.flower{font-size:28px;float:right}
+.detail{
+  margin-top:18px;border:1px solid var(--line);border-radius:22px;
+  padding:20px;background:white;scroll-margin-top:16px
+}
+.hidden{display:none}
+.detail h2{margin:5px 0 4px}
+.story{line-height:1.8;color:#66514a}
+.quote{background:#fff5f0;border-radius:14px;padding:14px;margin:14px 0;color:#76564e}
+.field-label{display:block;margin:14px 0 7px;font-weight:800;color:#5d4741}
+.text-input,.detail textarea{
+  width:100%;font:inherit;font-size:16px;border:1px solid var(--line);
+  border-radius:14px;padding:13px;background:#fff;color:#333;outline:none
+}
+.text-input:focus,.detail textarea:focus{
+  border-color:#b88c7f;box-shadow:0 0 0 3px rgba(184,140,127,.14)
+}
+.detail textarea{resize:vertical;min-height:100px}
+.row{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.btn{
+  border:0;border-radius:14px;padding:13px 18px;background:var(--accent);
+  color:#fff;font-size:16px;font-weight:700;cursor:pointer
+}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.ghost{background:white;color:var(--ink);border:1px solid var(--line)}
+.msg{font-size:13px;color:var(--muted)}
+.success{background:#f5ede7;border-radius:14px;padding:15px;line-height:1.7}
+.warnbox{
+  display:none;margin-top:10px;padding:12px 14px;border-radius:14px;
+  background:#fff2e8;border:1px solid #f0c9ae;color:#8a4d2f;line-height:1.6;font-size:14px
+}
+.warnbox.show{display:block}
+.badword{
+  display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:999px;
+  background:#ffe0d2;color:#9a3d22;font-weight:800
+}
+.input-error{border-color:#d46b52!important;box-shadow:0 0 0 3px rgba(212,107,82,.12)!important}
+.pager{display:flex;justify-content:space-between;align-items:center;margin:18px 0}
+.pager button{border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 14px}
+.pager button:disabled{opacity:.4}
+@media(max-width:520px){
+  .grid{grid-template-columns:1fr}
+  h1{font-size:27px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <div class="eyebrow">模範母親表揚典禮</div>
+    <h1>把想說的話，送給媽媽</h1>
+    <p class="sub">選擇一位獲獎媽媽，閱讀她的故事並留下一句祝福。送出後，祝福會出現在典禮現場大螢幕。</p>
+  </section>
+
+  <input id="search" class="search" type="search" placeholder="搜尋媽媽姓名或關鍵字" />
+  <div id="grid" class="grid"></div>
+
+  <div class="pager">
+    <button id="prev" type="button">上一頁</button>
+    <span id="page" class="msg"></span>
+    <button id="next" type="button">下一頁</button>
+  </div>
+
+  <section id="detail" class="detail hidden"></section>
+</div>
+
+<script>
+const client=supabase.createClient(APP_CONFIG.SUPABASE_URL,APP_CONFIG.SUPABASE_KEY);
+const state={awards:[],wishCounts:{},page:1,pageSize:12,moderationTerms:[]};
+const $=s=>document.querySelector(s);
+
+function esc(s=''){
+  return String(s).replace(/[&<>'"]/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'
+  }[c]))
+}
+
+
+function normalizeText(s=''){
+  return String(s)
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}_－—~～·・]+/gu,'');
+}
+
+function findBadTerms(text){
+  const normalized=normalizeText(text);
+  const hits=[];
+  for(const t of state.moderationTerms){
+    const termNorm=normalizeText(t.term);
+    if(termNorm && normalized.includes(termNorm)){
+      hits.push(t);
+    }
+  }
+  return hits;
+}
+
+function renderProfanityWarning(nameHits,messageHits){
+  const box=document.getElementById('profanityWarning');
+  if(!box)return;
+
+  const all=[...nameHits,...messageHits];
+  const unique=[];
+  const seen=new Set();
+  for(const x of all){
+    if(!seen.has(x.term)){
+      seen.add(x.term);
+      unique.push(x);
+    }
+  }
+
+  const sender=document.getElementById('senderName');
+  const wish=document.getElementById('wish');
+
+  sender?.classList.toggle('input-error',nameHits.length>0);
+  wish?.classList.toggle('input-error',messageHits.length>0);
+
+  if(!unique.length){
+    box.classList.remove('show');
+    box.innerHTML='';
+    return false;
+  }
+
+  box.innerHTML=`
+    <strong>⚠️ 內容包含不適合公開顯示的字詞，請修改後再送出。</strong><br>
+    偵測到：
+    ${unique.map(x=>`<span class="badword">${esc(x.term)}</span>`).join('')}
+  `;
+  box.classList.add('show');
+  return true;
+}
+
+async function load(){
+  const [
+    {data:awards,error:aerr},
+    {data:wishes,error:werr},
+    {data:terms,error:terr}
+  ]=await Promise.all([
+    client.from('awards')
+      .select('id,sort_order,name,role,story,quote,keywords,photo_url')
+      .order('sort_order'),
+    client.from('wishes').select('award_id'),
+    client.from('moderation_terms')
+      .select('term,severity,category')
+      .eq('active',true)
+      .order('severity',{ascending:false})
+  ]);
+
+  if(aerr||werr||terr){
+    console.error(aerr||werr||terr);
+    $('#grid').innerHTML='<p>資料載入失敗，請重新整理後再試。</p>';
+    return;
+  }
+
+  state.awards=awards||[];
+  state.moderationTerms=terms||[];
+  state.wishCounts={};
+  (wishes||[]).forEach(w=>{
+    state.wishCounts[w.award_id]=(state.wishCounts[w.award_id]||0)+1;
+  });
+  render();
+}
+
+function filtered(){
+  const q=$('#search').value.trim().toLowerCase();
+  return state.awards.filter(a=>
+    !q ||
+    `${a.name} ${a.role||''} ${(a.keywords||[]).join(' ')}`
+      .toLowerCase().includes(q)
+  );
+}
+
+function render(){
+  const arr=filtered();
+  const pages=Math.max(1,Math.ceil(arr.length/state.pageSize));
+  state.page=Math.min(state.page,pages);
+
+  const slice=arr.slice(
+    (state.page-1)*state.pageSize,
+    state.page*state.pageSize
+  );
+
+  $('#grid').innerHTML=slice.map(a=>`
+    <button class="card" data-id="${a.id}" type="button">
+      <span class="flower">${state.wishCounts[a.id]?'🌺':'🌷'}</span>
+      <strong>${esc(a.name)}</strong>
+      <div class="role">${esc(a.role||'模範母親')}</div>
+      <div class="count">${state.wishCounts[a.id]||0} 則祝福</div>
+    </button>
+  `).join('') || '<p>找不到符合的獲獎者。</p>';
+
+  $('#page').textContent=`第 ${state.page} / ${pages} 頁`;
+  $('#prev').disabled=state.page<=1;
+  $('#next').disabled=state.page>=pages;
+
+  document.querySelectorAll('.card').forEach(btn=>{
+    btn.addEventListener('click',()=>openDetail(Number(btn.dataset.id)));
+  });
+}
+
+function openDetail(id){
+  const a=state.awards.find(x=>x.id===id);
+  if(!a)return;
+
+  const d=$('#detail');
+  d.classList.remove('hidden');
+  d.innerHTML=`
+    <div class="row">
+      <div>
+        <div class="eyebrow">第 ${String(a.sort_order).padStart(2,'0')} 位模範母親</div>
+        <h2>${esc(a.name)}</h2>
+        <div class="role">${esc(a.role||'')}</div>
+      </div>
+      <button id="close" class="btn ghost" type="button">收起</button>
+    </div>
+
+    <p class="story">${esc(a.story||'')}</p>
+    ${a.quote?`<div class="quote">「${esc(a.quote)}」</div>`:''}
+
+    <form id="wishForm">
+      <label class="field-label" for="senderName">你的姓名</label>
+      <input
+        id="senderName"
+        class="text-input"
+        type="text"
+        maxlength="30"
+        placeholder="請輸入你的姓名"
+        autocomplete="name"
+        required
+      />
+
+      <label class="field-label" for="wish">想對 ${esc(a.name)} 媽媽說什麼？</label>
+      <textarea
+        id="wish"
+        maxlength="50"
+        placeholder="例如：謝謝您一直陪著我們，媽媽辛苦了！"
+        required
+      ></textarea>
+
+      <div id="profanityWarning" class="warnbox"></div>
+
+      <div class="row" style="margin-top:10px">
+        <span class="msg">姓名最多 30 字；留言最多 50 字，送出後會顯示在現場大螢幕。</span>
+        <button class="btn" type="submit">送出祝福</button>
+      </div>
+    </form>
+  `;
+
+  $('#close').onclick=()=>d.classList.add('hidden');
+
+  // 點完媽媽名字後，自動滑到留言區並把游標放在姓名欄
+  setTimeout(()=>{
+    d.scrollIntoView({behavior:'smooth',block:'start'});
+    setTimeout(()=>$('#senderName')?.focus({preventScroll:true}),450);
+  },80);
+
+  const senderInput=$('#senderName');
+  const wishInput=$('#wish');
+
+  function liveModerationCheck(){
+    const nameHits=findBadTerms(senderInput?.value||'');
+    const messageHits=findBadTerms(wishInput?.value||'');
+    renderProfanityWarning(nameHits,messageHits);
+  }
+
+  senderInput?.addEventListener('input',liveModerationCheck);
+  wishInput?.addEventListener('input',liveModerationCheck);
+
+  $('#wishForm').onsubmit=async e=>{
+    e.preventDefault();
+
+    const sender=$('#senderName').value.trim().slice(0,30);
+    const text=$('#wish').value.trim().slice(0,50);
+
+    if(!sender){
+      alert('請輸入你的姓名');
+      $('#senderName').focus();
+      return;
+    }
+    if(!text){
+      alert('請輸入想對媽媽說的話');
+      $('#wish').focus();
+      return;
+    }
+
+    const nameHits=findBadTerms(sender);
+    const messageHits=findBadTerms(text);
+    if(renderProfanityWarning(nameHits,messageHits)){
+      const target=nameHits.length ? $('#senderName') : $('#wish');
+      target?.focus();
+      target?.scrollIntoView({behavior:'smooth',block:'center'});
+      return;
+    }
+
+    const btn=e.target.querySelector('button[type=submit]');
+    btn.disabled=true;
+    btn.textContent='送出中…';
+
+    const {error}=await client.from('wishes').insert({
+      award_id:a.id,
+      sender_name:sender,
+      message:text
+    });
+
+    if(error){
+      console.error(error);
+      btn.disabled=false;
+      btn.textContent='送出祝福';
+      alert('送出失敗，請稍後再試。');
+      return;
+    }
+
+    state.wishCounts[a.id]=(state.wishCounts[a.id]||0)+1;
+    render();
+
+    d.innerHTML=`
+      <div class="success">
+        <strong>祝福已送出 🌷</strong><br>
+        ${esc(sender)} 對 ${esc(a.name)} 媽媽說：「${esc(text)}」
+      </div>
+    `;
+  };
+}
+
+$('#search').addEventListener('input',()=>{
+  state.page=1;
+  render();
+});
+$('#prev').onclick=()=>{state.page--;render()};
+$('#next').onclick=()=>{state.page++;render()};
+
+load();
+</script>
+</body>
+</html>
